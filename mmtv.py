@@ -93,7 +93,7 @@ def main():
     from pathlib import Path
     import matplotlib.pyplot as plt
 
-    example_path = Path("OCT_img176.tif")
+    example_path = Path("example.tif")
     with tifffile.TiffFile(example_path) as img:
         y = img.asarray()
         if len(y.shape) > 2:
