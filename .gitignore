@@ -1,3 +1,4 @@
 *.tif
 .vscode/
 *.png
+__pycache__/

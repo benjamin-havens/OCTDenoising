@@ -1,22 +1,20 @@
 # %% IMPORTS
+from __future__ import annotations
+
+import numpy as np
 import odl
 import tqdm
-import numpy as np
+
+from oct_processing import (
+    TransformConfig,
+    linear_amplitude_to_pixels,
+    pixels_to_linear_amplitude,
+)
 
 
-# %% MMTV functions
-def pixels_to_intensity(x, low, high):
-    db = (x / 255.0) * (high - low) - (high - low)
-    return 10 ** (db / 20)
-
-
-def intensity_to_pixels(x, low, high):
-    db = np.clip(20 * np.log10(x), low, high)
-    return (db + (high - low)) / (high - low) * 255.0
-
-
+# %% MMTV
 def MMTV_denoise(
-    y,
+    y_linear,
     *,
     max_iterations=1000,
     max_inner_iterations=20,
@@ -24,29 +22,33 @@ def MMTV_denoise(
     beta=0.9,
     tv_reg_strength=1e-2,
     convergence_threshold=1e-6,
-    db_low=-40,
-    db_high=0,
+    min_intensity=1e-6,
 ):
     """
-    Denoise `y` assuming gamma distribution with parameters `alpha` and `beta` for the multiplicative speckle,
-    and using TV regularization (L1-norm of image gradient) for its ability to preserve edges.
+    Denoise linear-amplitude OCT data with MMTV.
 
-    :param y: ndarray of scaled log intensities (0-255)
+    :param y_linear: ndarray of linear amplitudes
     :param max_iterations: how many iterations of MMTV to run
-    :param max_inner_iterations: how many iterations of PDHG to use for minimizing each regularized majorant
-    :param alpha: parameter of gamma distribution for speckle noise
-    :param beta: parameter of gamma distribution for speckle noise
-    :param tv_reg_strength: lambda, the relative strength of TV regularization
-    :param convergence_threshold: when the approximate solution changes relatively less than this (||x_k - x_{k-1}||^2 / ||x_k||^2), stop even if `max_iterations` is not yet reached.
-    :param db_low: What dB a pixel value of 0 corresponds to.
-    :param db_high: What dB a pixel value of 255 corresponds to.
+    :param max_inner_iterations: how many iterations of PDHG to run per MM step
+    :param alpha: gamma speckle shape parameter
+    :param beta: gamma speckle scale parameter
+    :param tv_reg_strength: lambda, TV regularization strength
+    :param convergence_threshold: stop when ||x_k - x_{k-1}||^2 / ||x_k||^2 < threshold
+    :param min_intensity: positivity floor used by the lower-bound box constraint
     """
-    h, w = y.shape
+
+    y_linear = np.asarray(y_linear, dtype=np.float64)
+    if y_linear.ndim != 2:
+        raise ValueError(f"y_linear must be 2D, got shape {y_linear.shape}.")
+    if min_intensity <= 0:
+        raise ValueError("min_intensity must be positive.")
+
+    h, w = y_linear.shape
     lambda_ = tv_reg_strength
 
     # Set up the minimizations in ODL's format
     space = odl.uniform_discr([0, 0], [h, w], [h, w])
-    y = space.element(pixels_to_intensity(y, db_low, db_high))
+    y = space.element(np.maximum(y_linear, min_intensity))
     eye, grad = odl.IdentityOperator(space), odl.Gradient(space)
     L = odl.BroadcastOperator(eye, grad)  # Project image to itself plus gradient
     f = odl.solvers.IndicatorBox(space, 1e-6, 1)  # Amplitudes ought not be leq 0
@@ -84,7 +86,7 @@ def MMTV_denoise(
         if rel_change < convergence_threshold:
             break
 
-    return intensity_to_pixels(x_k.asarray(), db_low, db_high).astype(int)
+    return x_k.asarray()
 
 
 # %% MAIN
@@ -95,21 +97,41 @@ def main():
 
     example_path = Path("example.tif")
     with tifffile.TiffFile(example_path) as img:
-        y = img.asarray()
-        if len(y.shape) > 2:
-            y = y.mean(axis=2)  # (H, W, C) -> (H, W) (grayscale)
-    x_hat = MMTV_denoise(y)
+        y_pixels = img.asarray()
+        if y_pixels.ndim > 2:
+            y_pixels = y_pixels.mean(axis=2)
 
-    # Save comparison plot
+    if np.issubdtype(y_pixels.dtype, np.integer):
+        max_pixel = int(np.iinfo(y_pixels.dtype).max)
+    else:
+        max_pixel = 255
+
+    # Gamma-mode display transform with explicit calibrated amplitude cut levels.
+    transform = TransformConfig(
+        mode="gamma",
+        max_pixel=max_pixel,
+        gamma=0.4,
+        amp_low=1e-3,
+        amp_high=1.0,
+    )
+
+    y_linear = pixels_to_linear_amplitude(y_pixels, transform)
+    x_hat_linear = MMTV_denoise(y_linear)
+
+    out_dtype = np.uint16 if max_pixel > 255 else np.uint8
+    x_hat_pixels = linear_amplitude_to_pixels(
+        x_hat_linear, transform, out_dtype=out_dtype
+    )
+
     out_dir = Path(".")
     fig, axes = plt.subplots(2, 1, figsize=(6, 6), constrained_layout=True)
 
-    axes[0].imshow(y, cmap="gray")
-    axes[0].set_title("Input")
+    axes[0].imshow(y_pixels, cmap="gray")
+    axes[0].set_title("Input (pixels)")
     axes[0].axis("off")
 
-    axes[1].imshow(x_hat, cmap="gray")
-    axes[1].set_title("Denoised")
+    axes[1].imshow(x_hat_pixels, cmap="gray")
+    axes[1].set_title("Denoised (pixels)")
     axes[1].axis("off")
 
     plt.savefig(out_dir / "mmtv_comparison.png", dpi=200)
