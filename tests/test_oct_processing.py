@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from oct_processing import (
+from denoising.oct_processing import (
     TransformConfig,
     linear_amplitude_to_pixels,
     pixels_to_linear_amplitude,

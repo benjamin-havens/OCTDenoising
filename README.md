@@ -1,6 +1,6 @@
 # OCT Denoising (MMTV)
 
-This repository contains a Python implementation of MMTV denoising for OCT images in [`mmtv.py`](./mmtv.py), based on:
+This repository contains a Python implementation of MMTV denoising for OCT images in [`src/denoising/mmtv.py`](./src/denoising/mmtv.py), based on:
 
 Varadarajan, D., Magnain, C., Fogarty, M., Boas, D. A., Fischl, B., & Wang, H. (2022). *A novel algorithm for multiplicative speckle noise reduction in ex vivo human brain OCT images*. NeuroImage, 257, 119304. https://doi.org/10.1016/j.neuroimage.2022.119304
 
@@ -9,13 +9,13 @@ Varadarajan, D., Magnain, C., Fogarty, M., Boas, D. A., Fischl, B., & Wang, H. (
 - Models speckle as multiplicative Gamma noise.
 - Uses majorize-minimize updates with TV regularization.
 - Solves regularized subproblems with PDHG via ODL.
-- Provides explicit OCT scaling transforms in [`oct_processing.py`](./oct_processing.py):
+- Provides explicit OCT scaling transforms in [`src/denoising/oct_processing.py`](./src/denoising/oct_processing.py):
   - `mode="db"`: dB cut levels and linear dB scaling to/from pixel range.
   - `mode="gamma"`: power-law display compression with calibrated amplitude cut levels.
 
 ## Processing API
 
-`oct_processing.py` exposes:
+`denoising.oct_processing` exposes:
 
 - `TransformConfig`
 - `pixels_to_linear_amplitude(pixels, config)`
@@ -36,7 +36,7 @@ Notes:
 
 ## MMTV API
 
-`MMTV_denoise` now operates on **linear amplitude** directly:
+`MMTV_denoise` operates on **linear amplitude** directly:
 
 ```python
 x_hat_linear = MMTV_denoise(y_linear)
@@ -52,12 +52,12 @@ x_hat_linear = MMTV_denoise(y_linear)
 
 ```python
 import numpy as np
-from oct_processing import (
+from denoising.oct_processing import (
     TransformConfig,
     pixels_to_linear_amplitude,
     linear_amplitude_to_pixels,
 )
-from mmtv import MMTV_denoise
+from denoising.mmtv import MMTV_denoise
 
 y_pixels = ...  # 8-bit or 16-bit OCT display image
 
@@ -77,7 +77,7 @@ x_hat_pixels = linear_amplitude_to_pixels(x_hat_linear, config, out_dtype=np.uin
 ### 2) Direct linear-amplitude workflow (ML target generation)
 
 ```python
-from mmtv import MMTV_denoise
+from denoising.mmtv import MMTV_denoise
 
 y_linear = ...  # FFT amplitude domain data
 x_hat_linear = MMTV_denoise(y_linear)
@@ -105,8 +105,19 @@ pip install numpy odl tqdm tifffile matplotlib pytest
 Run:
 
 ```bash
-pytest -q
+PYTHONPATH=src pytest -q
 ```
+
+## Run Demo
+
+From the repository root:
+
+```bash
+PYTHONPATH=src python -m denoising.mmtv
+```
+
+The comparison image is written to `outputs/` with a local-time prefix:
+`YYYYMMDD_HHMMSS_mmtv_comparison.png` (or `..._01.png`, `..._02.png` on collisions).
 
 Current tests cover:
 

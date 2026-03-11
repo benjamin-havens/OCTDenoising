@@ -51,7 +51,9 @@ def pixels_to_linear_amplitude(pixels, config: TransformConfig):
     p = _clip_pixels(np.asarray(pixels, dtype=np.float64), config)
 
     if config.mode == "db":
-        db = config.db_low + (p / float(config.max_pixel)) * (config.db_high - config.db_low)
+        db = config.db_low + (p / float(config.max_pixel)) * (
+            config.db_high - config.db_low
+        )
         return 10.0 ** (db / 20.0)
 
     t_low = config.amp_low**config.gamma

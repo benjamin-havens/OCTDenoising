@@ -1,11 +1,14 @@
 # %% IMPORTS
 from __future__ import annotations
 
-import numpy as np
-import odl
-import tqdm
+from datetime import datetime
+from pathlib import Path
 
-from oct_processing import (
+import numpy as np
+import tqdm
+import odl
+
+from .oct_processing import (
     TransformConfig,
     linear_amplitude_to_pixels,
     pixels_to_linear_amplitude,
@@ -90,12 +93,25 @@ def MMTV_denoise(
 
 
 # %% MAIN
+def _build_comparison_output_path(
+    output_dir: Path, now: datetime | None = None
+) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = (now or datetime.now()).strftime("%Y%m%d_%H%M%S")
+    base_name = f"{timestamp}_mmtv_comparison"
+    candidate = output_dir / f"{base_name}.png"
+    suffix = 1
+    while candidate.exists():
+        candidate = output_dir / f"{base_name}_{suffix:02d}.png"
+        suffix += 1
+    return candidate
+
+
 def main():
     import tifffile
-    from pathlib import Path
     import matplotlib.pyplot as plt
 
-    example_path = Path("example.tif")
+    example_path = Path("inputs/example.tif")
     with tifffile.TiffFile(example_path) as img:
         y_pixels = img.asarray()
         if y_pixels.ndim > 2:
@@ -116,14 +132,14 @@ def main():
     )
 
     y_linear = pixels_to_linear_amplitude(y_pixels, transform)
-    x_hat_linear = MMTV_denoise(y_linear)
+    x_hat_linear = MMTV_denoise(y_linear, alpha=2, beta=2)
 
     out_dtype = np.uint16 if max_pixel > 255 else np.uint8
     x_hat_pixels = linear_amplitude_to_pixels(
         x_hat_linear, transform, out_dtype=out_dtype
     )
 
-    out_dir = Path(".")
+    out_dir = Path("outputs")
     fig, axes = plt.subplots(2, 1, figsize=(6, 6), constrained_layout=True)
 
     axes[0].imshow(y_pixels, cmap="gray")
@@ -134,7 +150,8 @@ def main():
     axes[1].set_title("Denoised (pixels)")
     axes[1].axis("off")
 
-    plt.savefig(out_dir / "mmtv_comparison.png", dpi=200)
+    output_path = _build_comparison_output_path(out_dir)
+    plt.savefig(output_path, dpi=200)
     plt.close(fig)
 
 
