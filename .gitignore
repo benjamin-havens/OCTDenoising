@@ -1,6 +1,9 @@
 *.tif
-.vscode/
+*.csv
 *.png
+
+.vscode/
 __pycache__/
+
 outputs
 inputs
