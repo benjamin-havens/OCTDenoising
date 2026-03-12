@@ -219,19 +219,31 @@ def _estimate_single_pair(
     diagnostics_dir.mkdir(parents=True, exist_ok=True)
 
     domain_payloads = {
-        "linear": (original_linear, denoised_linear),
-        "pixel": (original_pixels, denoised_pixels),
+        "linear": {
+            "original": original_linear,
+            "denoised": denoised_linear,
+            "ratio_power": 2,
+        },
+        "pixel": {
+            "original": original_pixels,
+            "denoised": denoised_pixels,
+            "ratio_power": 2,
+        },
     }
 
     domain_metrics: dict[str, object] = {}
     frame_rows: list[dict[str, float | int | str]] = []
     volume_rows: list[dict[str, float | int | str]] = []
 
-    for domain_name, (original_arr, denoised_arr) in domain_payloads.items():
+    for domain_name, payload in domain_payloads.items():
+        original_arr = payload["original"]
+        denoised_arr = payload["denoised"]
+        ratio_power = int(payload["ratio_power"])
         analysis = _analyze_domain(
             domain_name=domain_name,
             original=original_arr,
             denoised=denoised_arr,
+            ratio_power=ratio_power,
             max_speckle_samples=max_speckle_samples,
             eps=eps,
             rng=rng,
@@ -304,11 +316,17 @@ def _analyze_domain(
     domain_name: str,
     original: np.ndarray,
     denoised: np.ndarray,
+    ratio_power: int,
     max_speckle_samples: int,
     eps: float,
     rng: np.random.Generator,
 ) -> dict[str, object]:
-    speckle, valid_mask = compute_speckle_ratio(original, denoised, eps=eps)
+    speckle, valid_mask = compute_speckle_ratio(
+        original,
+        denoised,
+        eps=eps,
+        ratio_power=ratio_power,
+    )
 
     volume_reconstruction = compute_reconstruction_metrics(original, denoised, eps=eps)
     volume_samples = downsample_values(
@@ -328,7 +346,9 @@ def _analyze_domain(
 
     n_frames = int(original.shape[0])
     for frame_idx in range(n_frames):
-        frame_recon = compute_reconstruction_metrics(original[frame_idx], denoised[frame_idx], eps=eps)
+        frame_recon = compute_reconstruction_metrics(
+            original[frame_idx], denoised[frame_idx], eps=eps
+        )
         frame_reconstruction.append({"frame_index": frame_idx, **frame_recon})
 
         frame_samples = downsample_values(
@@ -402,6 +422,7 @@ def _analyze_domain(
         "frame_rows": frame_rows,
         "volume_rows": volume_rows,
         "metrics": {
+            "speckle_ratio_power": int(ratio_power),
             "reconstruction": {
                 "volume": volume_reconstruction,
                 "per_frame": frame_reconstruction,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+from scipy.ndimage import uniform_filter1d
 
 from .base import BaseDenoiser
 
@@ -17,12 +18,11 @@ class TemporalMeanDenoiser(BaseDenoiser):
 
     def denoise_sequence(self, frames_linear: np.ndarray) -> np.ndarray:
         frames = self.validate_linear_sequence(frames_linear)
-        n_frames = frames.shape[0]
-        denoised = np.empty_like(frames, dtype=np.float64)
-
-        for i in range(n_frames):
-            start = max(0, i - self.radius)
-            stop = min(n_frames, i + self.radius + 1)
-            denoised[i] = frames[start:stop].mean(axis=0)
-
+        size = 2 * self.radius + 1
+        denoised = uniform_filter1d(
+            frames,
+            size=size,
+            axis=0,
+            mode="reflect",
+        )
         return denoised

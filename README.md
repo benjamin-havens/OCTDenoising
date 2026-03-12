@@ -253,6 +253,75 @@ results = estimate_pairs(
 )
 ```
 
+## Speckle Degradation To Target SNR
+
+`degradation` applies multiplicative Gamma speckle and scales noise strength to a
+requested SNR target.
+
+SNR definition used by this utility:
+
+- `SNR = mean(clean_intensity) / std(noisy_intensity - clean_intensity)`
+- dB conversion: `10 * log10(SNR)`
+
+### Degradation CLI (folder input)
+
+```bash
+PYTHONPATH=src python -m degradation.main \
+  --input-folder /path/to/clean_volume \
+  --target-snr 15 \
+  --alpha 20 \
+  --beta 20 \
+  --domain amplitude \
+  --match-mode exact \
+  --output-root outputs/speckle
+```
+
+Useful options:
+
+- `--domain {amplitude,pixel}` (default: `amplitude`)
+- `--snr-units {db,linear}` (default: `db`)
+- `--match-mode {exact,analytic}` (default: `exact`)
+- `--output-dir` (explicit destination; overrides `--output-root` behavior)
+- Transform options for amplitude-domain folder processing:
+  - `--transform-mode {db,gamma}`
+  - `--max-pixel`, `--gamma`, `--amp-low`, `--amp-high`, `--db-low`, `--db-high`, `--eps`
+
+Folder outputs:
+
+- TIFF frames with original filenames preserved 1:1
+- `degradation_metrics.json` containing target/achieved SNR, alpha/beta, lambda, mode, seed, dtype, and transform config
+
+### Degradation Python API
+
+```python
+import numpy as np
+from degradation import degrade_array_to_snr, degrade_folder_to_snr
+
+clean_amp = np.asarray(..., dtype=np.float64)  # linear amplitude
+array_result = degrade_array_to_snr(
+    clean_amp,
+    target_snr=15.0,
+    alpha=20.0,
+    beta=20.0,
+    input_domain="amplitude",
+    snr_units="db",
+    match_mode="exact",
+    seed=0,
+)
+degraded_amp = array_result.degraded
+
+folder_result = degrade_folder_to_snr(
+    input_folder="/path/to/clean_volume",
+    target_snr=15.0,
+    alpha=20.0,
+    beta=20.0,
+    domain="amplitude",
+    match_mode="exact",
+    output_root="outputs/speckle",
+    seed=0,
+)
+```
+
 Each pair writes:
 
 - `metrics.json`

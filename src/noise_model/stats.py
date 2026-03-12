@@ -38,11 +38,16 @@ def compute_speckle_ratio(
     denoised: np.ndarray,
     *,
     eps: float,
+    ratio_power: int = 1,
 ) -> tuple[np.ndarray, np.ndarray]:
+    if ratio_power <= 0:
+        raise ValueError("ratio_power must be a positive integer.")
+
     raw_denoised = np.asarray(denoised, dtype=np.float64)
     denoised_safe = np.maximum(raw_denoised, float(eps))
     original = np.asarray(original, dtype=np.float64)
-    speckle = original / denoised_safe
+    base_ratio = original / denoised_safe
+    speckle = base_ratio**int(ratio_power)
     valid_mask = (
         np.isfinite(speckle)
         & np.isfinite(original)
