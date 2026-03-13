@@ -286,9 +286,11 @@ def _validate_gamma(*, alpha: float, beta: float) -> None:
 
 def _normalize_target_snr(*, target_snr: float, snr_units: str) -> float:
     units = _normalize_choice(snr_units, valid={"db", "linear"}, name="snr_units")
-    if not np.isfinite(target_snr) or target_snr <= 0.0:
-        raise ValueError("target_snr must be finite and positive.")
+    if not np.isfinite(target_snr):
+        raise ValueError("target_snr must be finite.")
     if units == "linear":
+        if target_snr <= 0.0:
+            raise ValueError("target_snr must be positive when snr_units='linear'.")
         return float(target_snr)
     return float(10.0 ** (float(target_snr) / 10.0))
 
