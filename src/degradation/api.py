@@ -30,6 +30,7 @@ class ArrayDegradationResult:
     alpha: float
     beta: float
     eps: float
+    input_floor: float
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,7 @@ def degrade_array_to_snr(
     match_mode: str = "exact",
     scaling_rule: str = "affine",
     eps: float = 1e-12,
+    input_floor: float | None = None,
     seed: int | None = None,
     rng: np.random.Generator | None = None,
 ) -> ArrayDegradationResult:
@@ -102,6 +104,7 @@ def degrade_array_to_snr(
     scaling_rule_norm = _normalize_choice(scaling_rule, valid={"affine"}, name="scaling_rule")
     if eps <= 0.0 or not np.isfinite(eps):
         raise ValueError("eps must be finite and positive.")
+    effective_input_floor = _normalize_input_floor(input_floor=input_floor, eps=eps)
 
     resolved_rng = _resolve_rng(seed=seed, rng=rng)
     clean = np.asarray(clean_array, dtype=np.float64)
@@ -109,6 +112,7 @@ def degrade_array_to_snr(
         raise ValueError("clean_array must be non-empty.")
 
     clean_intensity = _to_intensity(clean, input_domain=input_domain_norm)
+    clean_intensity = np.maximum(clean_intensity, effective_input_floor)
     finite = np.isfinite(clean_intensity)
     if not np.any(finite):
         raise ValueError("clean_array does not contain finite values.")
@@ -158,6 +162,7 @@ def degrade_array_to_snr(
         alpha=float(alpha),
         beta=float(beta),
         eps=float(eps),
+        input_floor=float(effective_input_floor),
     )
 
 
@@ -181,6 +186,7 @@ def degrade_folder_to_snr(
     db_low: float = -40.0,
     db_high: float = 0.0,
     eps: float = 1e-12,
+    input_floor: float | None = None,
     seed: int = 0,
 ) -> FolderDegradationResult:
     stack = read_folder_stack(input_folder)
@@ -212,6 +218,7 @@ def degrade_folder_to_snr(
             match_mode=match_mode,
             scaling_rule="affine",
             eps=eps,
+            input_floor=input_floor,
             seed=seed,
         )
         out_dtype = source_dtype
@@ -228,6 +235,7 @@ def degrade_folder_to_snr(
             match_mode=match_mode,
             scaling_rule="affine",
             eps=eps,
+            input_floor=input_floor,
             seed=seed,
         )
         degraded_pixels = _cast_to_dtype(result.degraded, source_dtype)
@@ -264,6 +272,7 @@ def degrade_folder_to_snr(
         "shape": [int(x) for x in degraded_pixels.shape],
         "dtype": str(source_dtype),
         "eps": float(eps),
+        "input_floor": float(result.input_floor),
         "transform_config": asdict(config) if config is not None else None,
     }
 
@@ -301,6 +310,16 @@ def _normalize_choice(value: str, *, valid: set[str], name: str) -> str:
         expected = ", ".join(sorted(valid))
         raise ValueError(f"Unsupported {name} {value!r}; expected one of: {expected}.")
     return norm
+
+
+def _normalize_input_floor(*, input_floor: float | None, eps: float) -> float:
+    if input_floor is None:
+        resolved = float(eps)
+    else:
+        resolved = float(input_floor)
+    if not np.isfinite(resolved) or resolved <= 0.0:
+        raise ValueError("input_floor must be finite and positive.")
+    return resolved
 
 
 def _resolve_rng(*, seed: int | None, rng: np.random.Generator | None) -> np.random.Generator:

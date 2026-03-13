@@ -262,6 +262,7 @@ SNR definition used by this utility:
 
 - `SNR = mean(clean_intensity) / std(noisy_intensity - clean_intensity)`
 - dB conversion: `10 * log10(SNR)`
+- Before fitting and degradation, clean intensity is floored with `input_floor` (defaults to `eps`) so zero-valued inputs still receive multiplicative noise.
 
 ### Degradation CLI (folder input)
 
@@ -281,6 +282,7 @@ Useful options:
 - `--domain {amplitude,pixel}` (default: `amplitude`)
 - `--snr-units {db,linear}` (default: `db`)
 - `--match-mode {exact,analytic}` (default: `exact`)
+- `--input-floor` (optional intensity-floor override; default resolves to `eps`)
 - `--output-dir` (explicit destination; overrides `--output-root` behavior)
 - Transform options for amplitude-domain folder processing:
   - `--transform-mode {db,gamma}`
@@ -289,7 +291,7 @@ Useful options:
 Folder outputs:
 
 - TIFF frames with original filenames preserved 1:1
-- `degradation_metrics.json` containing target/achieved SNR, alpha/beta, lambda, mode, seed, dtype, and transform config
+- `degradation_metrics.json` containing target/achieved SNR, alpha/beta, lambda, mode, seed, dtype, `eps`, `input_floor`, and transform config
 
 ### Degradation Python API
 
@@ -306,6 +308,7 @@ array_result = degrade_array_to_snr(
     input_domain="amplitude",
     snr_units="db",
     match_mode="exact",
+    input_floor=None,  # defaults to eps
     seed=0,
 )
 degraded_amp = array_result.degraded
@@ -317,6 +320,7 @@ folder_result = degrade_folder_to_snr(
     beta=20.0,
     domain="amplitude",
     match_mode="exact",
+    input_floor=None,  # defaults to eps
     output_root="outputs/speckle",
     seed=0,
 )

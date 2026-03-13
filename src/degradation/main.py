@@ -30,6 +30,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--db-low", type=float, default=-40.0)
     parser.add_argument("--db-high", type=float, default=0.0)
     parser.add_argument("--eps", type=float, default=1e-12)
+    parser.add_argument("--input-floor", type=float, default=None)
     return parser.parse_args(argv)
 
 
@@ -53,6 +54,7 @@ def main(argv: list[str] | None = None) -> None:
         db_low=args.db_low,
         db_high=args.db_high,
         eps=args.eps,
+        input_floor=args.input_floor,
         seed=args.seed,
     )
     print(
