@@ -20,6 +20,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--domain", choices=("amplitude", "pixel"), default="amplitude")
     parser.add_argument("--snr-units", choices=("db", "linear"), default="db")
     parser.add_argument("--match-mode", choices=("exact", "analytic"), default="exact")
+    parser.add_argument(
+        "--debiased-noise",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use debiased affine speckle: n_eff = max(eps, 1 + lambda * (n - 1)).",
+    )
     parser.add_argument("--seed", type=int, default=0)
 
     parser.add_argument("--transform-mode", choices=("db", "gamma"), default="db")
@@ -46,6 +52,7 @@ def main(argv: list[str] | None = None) -> None:
         domain=args.domain,
         snr_units=args.snr_units,
         match_mode=args.match_mode,
+        debiased_noise=args.debiased_noise,
         transform_mode=args.transform_mode,
         max_pixel=args.max_pixel,
         gamma=args.gamma,

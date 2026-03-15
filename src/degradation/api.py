@@ -31,6 +31,7 @@ class ArrayDegradationResult:
     beta: float
     eps: float
     input_floor: float
+    debiased_noise: bool
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,7 @@ def degrade_array_to_snr(
     snr_units: str = "db",
     match_mode: str = "exact",
     scaling_rule: str = "affine",
+    debiased_noise: bool = True,
     eps: float = 1e-12,
     input_floor: float | None = None,
     seed: int | None = None,
@@ -105,6 +107,7 @@ def degrade_array_to_snr(
     if eps <= 0.0 or not np.isfinite(eps):
         raise ValueError("eps must be finite and positive.")
     effective_input_floor = _normalize_input_floor(input_floor=input_floor, eps=eps)
+    debiased_noise_norm = bool(debiased_noise)
 
     resolved_rng = _resolve_rng(seed=seed, rng=rng)
     clean = np.asarray(clean_array, dtype=np.float64)
@@ -127,12 +130,14 @@ def degrade_array_to_snr(
             clean_intensity=clean_intensity,
             raw_noise=raw_noise,
             target_snr_linear=target_snr_linear,
+            debiased_noise=debiased_noise_norm,
         )
     else:
         lambda_value = _exact_lambda(
             clean_intensity=clean_intensity,
             raw_noise=raw_noise,
             target_snr_linear=target_snr_linear,
+            debiased_noise=debiased_noise_norm,
             eps=eps,
         )
 
@@ -140,6 +145,7 @@ def degrade_array_to_snr(
         clean_intensity=clean_intensity,
         raw_noise=raw_noise,
         lambda_value=lambda_value,
+        debiased_noise=debiased_noise_norm,
         eps=eps,
     )
     degraded = _from_intensity(noisy_intensity, output_domain=input_domain_norm)
@@ -163,6 +169,7 @@ def degrade_array_to_snr(
         beta=float(beta),
         eps=float(eps),
         input_floor=float(effective_input_floor),
+        debiased_noise=debiased_noise_norm,
     )
 
 
@@ -177,6 +184,7 @@ def degrade_folder_to_snr(
     domain: str = "amplitude",
     snr_units: str = "db",
     match_mode: str = "exact",
+    debiased_noise: bool = True,
     transform_config: TransformConfig | None = None,
     transform_mode: str = "db",
     max_pixel: int | None = None,
@@ -217,6 +225,7 @@ def degrade_folder_to_snr(
             snr_units=snr_units,
             match_mode=match_mode,
             scaling_rule="affine",
+            debiased_noise=debiased_noise,
             eps=eps,
             input_floor=input_floor,
             seed=seed,
@@ -234,6 +243,7 @@ def degrade_folder_to_snr(
             snr_units=snr_units,
             match_mode=match_mode,
             scaling_rule="affine",
+            debiased_noise=debiased_noise,
             eps=eps,
             input_floor=input_floor,
             seed=seed,
@@ -268,6 +278,7 @@ def degrade_folder_to_snr(
         "lambda": float(result.lambda_value),
         "match_mode": result.match_mode,
         "scaling_rule": result.scaling_rule,
+        "debiased_noise": bool(result.debiased_noise),
         "seed": int(seed),
         "shape": [int(x) for x in degraded_pixels.shape],
         "dtype": str(source_dtype),
@@ -350,8 +361,12 @@ def _analytic_lambda(
     clean_intensity: np.ndarray,
     raw_noise: np.ndarray,
     target_snr_linear: float,
+    debiased_noise: bool,
 ) -> float:
-    base_noise = clean_intensity * (raw_noise - 1.0)
+    if debiased_noise:
+        base_noise = clean_intensity * (raw_noise - 1.0)
+    else:
+        base_noise = clean_intensity * raw_noise
     finite = np.isfinite(base_noise) & np.isfinite(clean_intensity)
     if not np.any(finite):
         raise ValueError("No finite values available for analytic matching.")
@@ -374,6 +389,7 @@ def _exact_lambda(
     clean_intensity: np.ndarray,
     raw_noise: np.ndarray,
     target_snr_linear: float,
+    debiased_noise: bool,
     eps: float,
 ) -> float:
     if target_snr_linear <= 0.0:
@@ -385,6 +401,7 @@ def _exact_lambda(
         clean_intensity=clean_intensity,
         raw_noise=raw_noise,
         lambda_value=high,
+        debiased_noise=debiased_noise,
         eps=eps,
     )
 
@@ -395,6 +412,7 @@ def _exact_lambda(
                 clean_intensity=clean_intensity,
                 raw_noise=raw_noise,
                 lambda_value=high,
+                debiased_noise=debiased_noise,
                 eps=eps,
             )
             continue
@@ -408,6 +426,7 @@ def _exact_lambda(
             clean_intensity=clean_intensity,
             raw_noise=raw_noise,
             lambda_value=mid,
+            debiased_noise=debiased_noise,
             eps=eps,
         )
         if np.isfinite(mid_snr) and mid_snr > target_snr_linear:
@@ -427,12 +446,14 @@ def _achieved_linear_snr(
     clean_intensity: np.ndarray,
     raw_noise: np.ndarray,
     lambda_value: float,
+    debiased_noise: bool,
     eps: float,
 ) -> float:
     noisy_intensity = _apply_affine_speckle(
         clean_intensity=clean_intensity,
         raw_noise=raw_noise,
         lambda_value=lambda_value,
+        debiased_noise=debiased_noise,
         eps=eps,
     )
     return compute_snr(clean_intensity, noisy_intensity, units="linear")
@@ -443,9 +464,13 @@ def _apply_affine_speckle(
     clean_intensity: np.ndarray,
     raw_noise: np.ndarray,
     lambda_value: float,
+    debiased_noise: bool,
     eps: float,
 ) -> np.ndarray:
-    speckle = np.maximum(eps, 1.0 + float(lambda_value) * (raw_noise - 1.0))
+    if debiased_noise:
+        speckle = np.maximum(eps, 1.0 + float(lambda_value) * (raw_noise - 1.0))
+    else:
+        speckle = np.maximum(eps, 1.0 + float(lambda_value) * raw_noise)
     return clean_intensity * speckle
 
 
